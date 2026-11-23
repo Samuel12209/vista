@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f5f3" />
+    <meta
+      name="description"
+      content="Vista is a clean, self-contained video library layout with placeholder media."
+    />
+    <title>Vista · Your library</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__start">
+        <button class="icon-btn" id="menuBtn" type="button" aria-label="Toggle sidebar" title="Menu">
+          <span data-icon="menu"></span>
+        </button>
+        <a class="brand" href="#/" aria-label="Vista home">
+          <span class="brand__mark"><span data-icon="play" data-icon-class="icon--brand"></span></span>
+          <span class="brand__word">Vista</span>
+          <span class="brand__dot" aria-hidden="true"></span>
+        </a>
+      </div>
+
+      <div class="topbar__search">
+        <form class="search" id="searchForm" role="search">
+          <label class="sr-only" for="searchInput">Search your library</label>
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search your library"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <kbd class="search__kbd" aria-hidden="true">/</kbd>
+          <button class="search__submit" type="submit" aria-label="Search">
+            <span data-icon="search"></span>
+          </button>
+        </form>
+        <button class="icon-btn mic-btn" id="micBtn" type="button" aria-label="Search by voice" title="Voice search placeholder">
+          <span data-icon="mic"></span>
+        </button>
+      </div>
+
+      <div class="topbar__end">
+        <button class="icon-btn theme-btn" id="themeBtn" type="button" aria-label="Switch appearance">
+          <span data-icon="moon"></span>
+        </button>
+        <button class="create-btn" id="createBtn" type="button">
+          <span data-icon="plus"></span>
+          <span class="create-btn__label">Create</span>
+        </button>
+        <div class="popover-wrap">
+          <button class="icon-btn" id="notifBtn" type="button" aria-label="Notifications">
+            <span data-icon="bell"></span>
+            <span class="notif-badge" id="notifBadge">3</span>
+          </button>
+          <div class="popover" id="notifPanel" hidden>
+            <div class="popover__head">
+              <h2>Notifications</h2>
+              <button class="text-btn" id="markReadBtn" type="button">Mark all read</button>
+            </div>
+            <div class="notif-list">
+              <button class="notif" type="button" data-notif>
+                <span class="avatar avatar--xs" style="--avatar-bg: #2f5d50">FN</span>
+                <span class="notif__copy"><strong>Field Notes</strong> published a new video <span>2 hours ago</span></span>
+                <span class="unread-dot" aria-label="Unread"></span>
+              </button>
+              <button class="notif" type="button" data-notif>
+                <span class="avatar avatar--xs" style="--avatar-bg: #5d6632">MP</span>
+                <span class="notif__copy"><strong>Moss &amp; Pine</strong> replied to your comment <span>Yesterday</span></span>
+                <span class="unread-dot" aria-label="Unread"></span>
+              </button>
+              <button class="notif" type="button" data-notif>
+                <span class="avatar avatar--xs" style="--avatar-bg: #7a3f2c">LS</span>
+                <span class="notif__copy"><strong>Lowlight Studio</strong> shared a live session <span>2 days ago</span></span>
+                <span class="unread-dot" aria-label="Unread"></span>
+              </button>
+            </div>
+            <div class="popover__foot">
+              <button class="text-btn" type="button" data-toast="Notification center is a placeholder.">See all notifications</button>
+            </div>
+          </div>
+        </div>
+        <div class="popover-wrap">
+          <button class="avatar-btn" id="profileBtn" type="button" aria-label="Account menu">
+            <span class="avatar avatar--me">JD</span>
+          </button>
+          <div class="popover profile-panel" id="profilePanel" hidden>
+            <div class="profile-summary">
+              <span class="avatar avatar--me">JD</span>
+              <span><strong>Jordan Doe</strong><span>jordan@example.com</span></span>
+            </div>
+            <div class="profile-links">
+              <button type="button" data-toast="Channel page is a placeholder."><span data-icon="user"></span>Your channel</button>
+              <button type="button" data-toast="Watch later is available from the sidebar."><span data-icon="clock"></span>Watch later</button>
+              <button type="button" data-toast="Settings are a placeholder."><span data-icon="settings"></span>Settings</button>
+            </div>
+            <div class="profile-links profile-links--last">
+              <button type="button" data-toast="Appearance follows the theme button."><span data-icon="moon"></span>Appearance: <span id="profileThemeLabel">Light</span></button>
+              <button type="button" data-toast="Signed out of the prototype."><span data-icon="logout"></span>Sign out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="Library navigation">
+        <nav class="side-nav" aria-label="Main">
+          <button class="nav-item is-active" type="button" data-section="home" title="Home">
+            <span data-icon="home"></span><span class="nav-item__label">Home</span>
+          </button>
+          <button class="nav-item" type="button" data-section="shorts" title="Shorts">
+            <span data-icon="shorts"></span><span class="nav-item__label">Shorts</span>
+          </button>
+          <button class="nav-item" type="button" data-section="subscriptions" title="Subscriptions">
+            <span data-icon="subs"></span><span class="nav-item__label">Subscriptions</span>
+          </button>
+        </nav>
+
+        <div class="side-rule"></div>
+
+        <div class="side-block">
+          <button class="nav-heading" type="button" data-toast="The You shelf is a placeholder.">
+            <span>You</span><span data-icon="chevronRight"></span>
+          </button>
+          <button class="nav-item" type="button" data-section="history" title="History">
+            <span data-icon="history"></span><span class="nav-item__label">History</span>
+          </button>
+          <button class="nav-item" type="button" data-section="playlists" title="Playlists">
+            <span data-icon="playlist"></span><span class="nav-item__label">Playlists</span>
+          </button>
+          <button class="nav-item" type="button" data-section="saved" title="Watch later">
+            <span data-icon="clock"></span><span class="nav-item__label">Watch later</span>
+          </button>
+          <button class="nav-item" type="button" data-section="liked" title="Liked videos">
+            <span data-icon="thumbUp"></span><span class="nav-item__label">Liked videos</span>
+          </button>
+          <button class="nav-item" type="button" data-section="your-videos" title="Your videos">
+            <span data-icon="film"></span><span class="nav-item__label">Your videos</span>
+          </button>
+        </div>
+
+        <div class="side-rule"></div>
+
+        <div class="side-block">
+          <p class="side-label">Subscriptions</p>
+          <button class="channel-link" type="button" data-channel="Field Notes" title="Field Notes">
+            <span class="avatar avatar--xs" style="--avatar-bg: #2f5d50">FN</span>
+            <span class="channel-link__name">Field Notes</span>
+            <span class="verified"><span data-icon="check"></span></span>
+          </button>
+          <button class="channel-link" type="button" data-channel="Moss &amp; Pine" title="Moss &amp; Pine">
+            <span class="avatar avatar--xs" style="--avatar-bg: #5d6632">MP</span>
+            <span class="channel-link__name">Moss &amp; Pine</span>
+            <span class="verified"><span data-icon="check"></span></span>
+          </button>
+          <button class="channel-link" type="button" data-channel="Lowlight Studio" title="Lowlight Studio">
+            <span class="avatar avatar--xs" style="--avatar-bg: #7a3f2c">LS</span>
+            <span class="channel-link__name">Lowlight Studio</span>
+          </button>
+          <button class="channel-link" type="button" data-channel="Open Road" title="Open Road">
+            <span class="avatar avatar--xs" style="--avatar-bg: #8a5233">OR</span>
+            <span class="channel-link__name">Open Road</span>
+          </button>
+          <button class="channel-link" type="button" data-channel="Signal Path" title="Signal Path">
+            <span class="avatar avatar--xs" style="--avatar-bg: #2e6a65">SP</span>
+            <span class="channel-link__name">Signal Path</span>
+            <span class="verified"><span data-icon="check"></span></span>
+          </button>
+          <button class="nav-item nav-item--small" type="button" data-section="subscriptions" title="All subscriptions">
+            <span data-icon="chevronDown"></span><span class="nav-item__label">Show all</span>
+          </button>
+        </div>
+
+        <div class="side-rule"></div>
+
+        <div class="side-block">
+          <p class="side-label">Explore</p>
+          <button class="nav-item nav-item--small" type="button" data-category="Design" title="Design">
+            <span data-icon="grid"></span><span class="nav-item__label">Design</span>
+          </button>
+          <button class="nav-item nav-item--small" type="button" data-category="Music" title="Music">
+            <span data-icon="music"></span><span class="nav-item__label">Music</span>
+          </button>
+          <button class="nav-item nav-item--small" type="button" data-category="Technology" title="Technology">
+            <span data-icon="cpu"></span><span class="nav-item__label">Technology</span>
+          </button>
+          <button class="nav-item nav-item--small" type="button" data-category="Food" title="Food">
+            <span data-icon="cooking"></span><span class="nav-item__label">Food</span>
+          </button>
+          <button class="nav-item nav-item--small" type="button" data-category="Travel" title="Travel">
+            <span data-icon="plane"></span><span class="nav-item__label">Travel</span>
+          </button>
+          <button class="nav-item nav-item--small" type="button" data-category="Learning" title="Learning">
+            <span data-icon="book"></span><span class="nav-item__label">Learning</span>
+          </button>
+        </div>
+
+        <footer class="sidebar__foot">
+          <div class="sidebar__stamp"><span class="status-dot"></span>Vista preview</div>
+          <p>Clean layout, placeholder media. Swap in your own library from <code>data.js</code>.</p>
+          <div class="sidebar__links">
+            <button type="button" data-toast="About page is a placeholder.">About</button>
+            <button type="button" data-toast="Keyboard shortcuts are a placeholder.">Shortcuts</button>
+            <button type="button" data-toast="Settings are a placeholder.">Settings</button>
+          </div>
+        </footer>
+      </aside>
+      <main class="home" id="homeView">
+        <div class="chips-bar">
+          <div class="chips" id="chips" role="tablist" aria-label="Filter by category"></div>
+          <button class="filter-btn" type="button" data-toast="More filters are a placeholder.">
+            <span data-icon="sliders"></span><span>Filters</span>
+          </button>
+        </div>
+
+        <section class="feed" aria-labelledby="feedTitle">
+          <header class="feed-head">
+            <div class="feed-head__title">
+              <p class="eyebrow" id="feedEyebrow">Your library</p>
+              <h1 id="feedTitle">For you</h1>
+            </div>
+            <div class="feed-tools">
+              <span class="proto-pill"><span class="status-dot"></span>Placeholder media</span>
+              <span class="feed-count" id="feedCount">18 videos</span>
+              <button class="icon-btn icon-btn--bordered" id="densityBtn" type="button" aria-label="Toggle compact grid" title="Toggle compact grid">
+                <span data-icon="grid"></span>
+              </button>
+            </div>
+          </header>
+
+          <div class="video-grid" id="videoGrid"></div>
+
+          <div class="empty" id="emptyState" hidden>
+            <span class="empty__icon"><span data-icon="compass"></span></span>
+            <h2 id="emptyTitle">Nothing here yet</h2>
+            <p id="emptyBody">Try a different filter, or clear your search to see the full library.</p>
+            <button class="btn btn--dark" id="emptyAction" type="button">Clear filters</button>
+          </div>
+        </section>
+      </main>
+      <main class="watch" id="watchView" hidden>
+        <div class="watch__main" id="watchMain"></div>
+        <aside class="watch__rail" id="watchRail" aria-label="Up next"></aside>
+      </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <button class="mobile-nav__item is-active" type="button" data-section="home">
+        <span data-icon="home"></span><span>Home</span>
+      </button>
+      <button class="mobile-nav__item" type="button" data-section="shorts">
+        <span data-icon="shorts"></span><span>Shorts</span>
+      </button>
+      <button class="mobile-nav__create" id="mobileCreateBtn" type="button" aria-label="Create">
+        <span data-icon="plus"></span>
+      </button>
+      <button class="mobile-nav__item" type="button" data-section="subscriptions">
+        <span data-icon="subs"></span><span>Subscriptions</span>
+      </button>
+      <button class="mobile-nav__item" type="button" data-toast="The You shelf is a placeholder.">
+        <span data-icon="user"></span><span>You</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-scrim" id="sidebarScrim" hidden></div>
+
+    <dialog class="dialog" id="createDialog">
+      <form method="dialog" class="dialog__card">
+        <div class="dialog__head">
+          <div>
+            <p class="eyebrow">Placeholder flow</p>
+            <h2>Upload a video</h2>
+          </div>
+          <button class="icon-btn" type="button" id="closeCreateBtn" aria-label="Close">
+            <span data-icon="x"></span>
+          </button>
+        </div>
+        <button class="dropzone" type="button" data-toast="File picker is a placeholder. Wire up your upload endpoint here.">
+          <span class="dropzone__icon"><span data-icon="upload"></span></span>
+          <strong>Drop a file here</strong>
+          <span>or choose a file from your device</span>
+        </button>
+        <label class="field">
+          <span>Title</span>
+          <input type="text" placeholder="Give your video a name" />
+        </label>
+        <label class="field">
+          <span>Visibility</span>
+          <select>
+            <option>Private</option>
+            <option>Unlisted</option>
+            <option>Public</option>
+          </select>
+        </label>
+        <div class="dialog__foot">
+          <button class="btn btn--quiet" type="button" id="cancelCreateBtn">Cancel</button>
+          <button class="btn btn--dark" type="submit" data-toast="Draft saved locally in the prototype.">Save draft</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast-stack" id="toastStack" role="status" aria-live="polite"></div>
+
+    <noscript>
+      <div class="noscript">Vista needs JavaScript to render the placeholder library.</div>
+    </noscript>
+
+    <script src="icons.js"></script>
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
