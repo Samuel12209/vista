@@ -6,11 +6,11 @@
     <meta name="theme-color" content="#f5f5f3" />
     <meta
       name="description"
-      content="Vista is a clean, self-contained video library layout with placeholder media."
+      content="Watch, upload, and share videos with your library."
     />
-    <title>Vista · Your library</title>
+    <title>YouTube</title>
     <link rel="stylesheet" href="styles.css" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e7482e'/%3E%3Cpath d='M13 9.5l10 6.5-10 6.5z' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 20'%3E%3Crect width='28' height='20' rx='5' fill='%23FF0000'/%3E%3Cpath d='M11.2 5.9v8.2l7.2-4.1z' fill='%23fff'/%3E%3C/svg%3E" />
   </head>
   <body>
     <header class="topbar">
@@ -18,20 +18,22 @@
         <button class="icon-btn" id="menuBtn" type="button" aria-label="Toggle sidebar" title="Menu">
           <span data-icon="menu"></span>
         </button>
-        <a class="brand" href="#/" aria-label="Vista home">
-          <span class="brand__mark"><span data-icon="play" data-icon-class="icon--brand"></span></span>
-          <span class="brand__word">Vista</span>
-          <span class="brand__dot" aria-hidden="true"></span>
+        <a class="brand" href="#/" aria-label="YouTube home">
+          <svg class="brand__mark" viewBox="0 0 28 20" aria-hidden="true" focusable="false">
+            <rect width="28" height="20" rx="5" fill="#FF0000" />
+            <path d="M11.2 5.9v8.2l7.2-4.1z" fill="#fff" />
+          </svg>
+          <span class="brand__word">YouTube</span>
         </a>
       </div>
 
       <div class="topbar__search">
         <form class="search" id="searchForm" role="search">
-          <label class="sr-only" for="searchInput">Search your library</label>
+          <label class="sr-only" for="searchInput">Search</label>
           <input
             id="searchInput"
             type="search"
-            placeholder="Search your library"
+            placeholder="Search"
             autocomplete="off"
             spellcheck="false"
           />
@@ -40,7 +42,7 @@
             <span data-icon="search"></span>
           </button>
         </form>
-        <button class="icon-btn mic-btn" id="micBtn" type="button" aria-label="Search by voice" title="Voice search placeholder">
+        <button class="icon-btn mic-btn" id="micBtn" type="button" aria-label="Search with your voice" title="Search with your voice">
           <span data-icon="mic"></span>
         </button>
       </div>
@@ -81,7 +83,7 @@
               </button>
             </div>
             <div class="popover__foot">
-              <button class="text-btn" type="button" data-toast="Notification center is a placeholder.">See all notifications</button>
+              <button class="text-btn" type="button" data-toast="You're all caught up.">See all notifications</button>
             </div>
           </div>
         </div>
@@ -95,13 +97,13 @@
               <span><strong>Jordan Doe</strong><span>jordan@example.com</span></span>
             </div>
             <div class="profile-links">
-              <button type="button" data-toast="Channel page is a placeholder."><span data-icon="user"></span>Your channel</button>
+              <button type="button" data-toast="Channel page"><span data-icon="user"></span>Your channel</button>
               <button type="button" data-toast="Watch later is available from the sidebar."><span data-icon="clock"></span>Watch later</button>
-              <button type="button" data-toast="Settings are a placeholder."><span data-icon="settings"></span>Settings</button>
+              <button type="button" data-toast="Settings"><span data-icon="settings"></span>Settings</button>
             </div>
             <div class="profile-links profile-links--last">
               <button type="button" data-toast="Appearance follows the theme button."><span data-icon="moon"></span>Appearance: <span id="profileThemeLabel">Light</span></button>
-              <button type="button" data-toast="Signed out of the prototype."><span data-icon="logout"></span>Sign out</button>
+              <button type="button" data-toast="Signed out."><span data-icon="logout"></span>Sign out</button>
             </div>
           </div>
         </div>
@@ -125,7 +127,7 @@
         <div class="side-rule"></div>
 
         <div class="side-block">
-          <button class="nav-heading" type="button" data-toast="The You shelf is a placeholder.">
+          <button class="nav-heading" type="button" data-toast="You">
             <span>You</span><span data-icon="chevronRight"></span>
           </button>
           <button class="nav-item" type="button" data-section="history" title="History">
@@ -134,14 +136,14 @@
           <button class="nav-item" type="button" data-section="playlists" title="Playlists">
             <span data-icon="playlist"></span><span class="nav-item__label">Playlists</span>
           </button>
+          <button class="nav-item" type="button" data-section="your-videos" title="Your videos">
+            <span data-icon="film"></span><span class="nav-item__label">Your videos</span>
+          </button>
           <button class="nav-item" type="button" data-section="saved" title="Watch later">
             <span data-icon="clock"></span><span class="nav-item__label">Watch later</span>
           </button>
           <button class="nav-item" type="button" data-section="liked" title="Liked videos">
             <span data-icon="thumbUp"></span><span class="nav-item__label">Liked videos</span>
-          </button>
-          <button class="nav-item" type="button" data-section="your-videos" title="Your videos">
-            <span data-icon="film"></span><span class="nav-item__label">Your videos</span>
           </button>
         </div>
 
@@ -202,35 +204,46 @@
         </div>
 
         <footer class="sidebar__foot">
-          <div class="sidebar__stamp"><span class="status-dot"></span>Vista preview</div>
-          <p>Clean layout, placeholder media. Swap in your own library from <code>data.js</code>.</p>
           <div class="sidebar__links">
-            <button type="button" data-toast="About page is a placeholder.">About</button>
-            <button type="button" data-toast="Keyboard shortcuts are a placeholder.">Shortcuts</button>
-            <button type="button" data-toast="Settings are a placeholder.">Settings</button>
+            <button type="button" data-toast="About">About</button>
+            <button type="button" data-toast="Press">Press</button>
+            <button type="button" data-toast="Copyright">Copyright</button>
+            <button type="button" data-toast="Contact us">Contact us</button>
+            <button type="button" data-toast="Creators">Creators</button>
+            <button type="button" data-toast="Advertise">Advertise</button>
+            <button type="button" data-toast="Developers">Developers</button>
           </div>
+          <div class="sidebar__links">
+            <button type="button" data-toast="Terms">Terms</button>
+            <button type="button" data-toast="Privacy">Privacy</button>
+            <button type="button" data-toast="Policy &amp; Safety">Policy &amp; Safety</button>
+            <button type="button" data-toast="How YouTube works">How YouTube works</button>
+            <button type="button" data-toast="Test new features">Test new features</button>
+          </div>
+          <p class="sidebar__copy">© 2026 YouTube</p>
         </footer>
       </aside>
       <main class="home" id="homeView">
         <div class="chips-bar">
           <div class="chips" id="chips" role="tablist" aria-label="Filter by category"></div>
-          <button class="filter-btn" type="button" data-toast="More filters are a placeholder.">
-            <span data-icon="sliders"></span><span>Filters</span>
-          </button>
+          <div class="chips-bar__tools">
+            <button class="filter-btn" type="button" data-toast="Filters">
+              <span data-icon="sliders"></span><span>Filters</span>
+            </button>
+            <button class="icon-btn icon-btn--bordered" id="densityBtn" type="button" aria-label="Toggle compact grid" title="Toggle compact grid">
+              <span data-icon="grid"></span>
+            </button>
+          </div>
         </div>
 
         <section class="feed" aria-labelledby="feedTitle">
-          <header class="feed-head">
+          <header class="feed-head" id="feedHead">
             <div class="feed-head__title">
               <p class="eyebrow" id="feedEyebrow">Your library</p>
               <h1 id="feedTitle">For you</h1>
             </div>
             <div class="feed-tools">
-              <span class="proto-pill"><span class="status-dot"></span>Demo clips</span>
               <span class="feed-count" id="feedCount">18 videos</span>
-              <button class="icon-btn icon-btn--bordered" id="densityBtn" type="button" aria-label="Toggle compact grid" title="Toggle compact grid">
-                <span data-icon="grid"></span>
-              </button>
             </div>
           </header>
 
@@ -263,7 +276,7 @@
       <button class="mobile-nav__item" type="button" data-section="subscriptions">
         <span data-icon="subs"></span><span>Subscriptions</span>
       </button>
-      <button class="mobile-nav__item" type="button" data-toast="The You shelf is a placeholder.">
+      <button class="mobile-nav__item" type="button" data-toast="You">
         <span data-icon="user"></span><span>You</span>
       </button>
     </nav>
@@ -274,8 +287,7 @@
       <form method="dialog" class="dialog__card" id="addForm" novalidate>
         <div class="dialog__head">
           <div>
-            <p class="eyebrow">Add to library</p>
-            <h2>Add a video</h2>
+            <h2>Upload videos</h2>
           </div>
           <button class="icon-btn" type="button" id="closeCreateBtn" aria-label="Close">
             <span data-icon="x"></span>
@@ -294,8 +306,8 @@
         <div class="add-pane" data-add-pane="file">
           <label class="dropzone" id="dropzone" for="videoFile">
             <span class="dropzone__icon"><span data-icon="upload"></span></span>
-            <strong id="dropLabel">Drop a video here</strong>
-            <span id="dropHint">or click to choose — MP4, WebM, MOV, OGG</span>
+            <strong id="dropLabel">Drag and drop video files to upload</strong>
+            <span id="dropHint">Your videos stay private until you publish them.</span>
             <input id="videoFile" type="file" accept="video/*" hidden />
           </label>
         </div>
@@ -317,7 +329,7 @@
 
         <div class="dialog__foot">
           <button class="btn btn--quiet" type="button" id="cancelCreateBtn">Cancel</button>
-          <button class="btn btn--dark" type="submit" id="addSubmit">Add video</button>
+          <button class="btn btn--dark" type="submit" id="addSubmit">Upload</button>
         </div>
       </form>
     </dialog>
@@ -325,7 +337,7 @@
     <div class="toast-stack" id="toastStack" role="status" aria-live="polite"></div>
 
     <noscript>
-      <div class="noscript">Vista needs JavaScript to render the placeholder library.</div>
+      <div class="noscript">YouTube needs JavaScript to run.</div>
     </noscript>
 
     <script src="icons.js"></script>

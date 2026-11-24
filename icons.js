@@ -1,5 +1,5 @@
 /* A small, self-contained icon set. Swap these paths for your own icon library later. */
-window.VistaIcons = {
+window.YTIcons = {
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/>',
@@ -66,7 +66,7 @@ window.VistaIcons = {
   sparkles: '<path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>',
 };
 
-window.vistaIcon = function (name, className) {
-  const paths = window.VistaIcons[name] || "";
+window.ytIcon = function (name, className) {
+  const paths = window.YTIcons[name] || "";
   return `<svg class="icon ${className || ""}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 };

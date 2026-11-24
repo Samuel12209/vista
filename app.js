@@ -1,5 +1,5 @@
 (() => {
-  const icon = window.vistaIcon;
+  const icon = window.ytIcon;
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -32,6 +32,7 @@
     feedTitle: $("#feedTitle"),
     feedEyebrow: $("#feedEyebrow"),
     feedCount: $("#feedCount"),
+    feedHead: $("#feedHead"),
     densityBtn: $("#densityBtn"),
     createDialog: $("#createDialog"),
     addForm: $("#addForm"),
@@ -49,21 +50,21 @@
   };
 
   const STORAGE = {
-    theme: "vista.theme",
-    collapsed: "vista.collapsed",
-    compact: "vista.compact",
-    saved: "vista.saved",
-    liked: "vista.liked",
-    disliked: "vista.disliked",
-    subscribed: "vista.subscribed",
-    progress: "vista.progress",
-    posters: "vista.posters",
-    added: "vista.added",
-    volume: "vista.volume",
-    rate: "vista.rate",
+    theme: "yt.theme",
+    collapsed: "yt.collapsed",
+    compact: "yt.compact",
+    saved: "yt.saved",
+    liked: "yt.liked",
+    disliked: "yt.disliked",
+    subscribed: "yt.subscribed",
+    progress: "yt.progress",
+    posters: "yt.posters",
+    added: "yt.added",
+    volume: "yt.volume",
+    rate: "yt.rate",
   };
 
-  const CORS_ORIGINS = window.VISTA_CORS_ORIGINS || [];
+  const CORS_ORIGINS = window.YT_CORS_ORIGINS || [];
 
   function readJSON(key, fallback) {
     try {
@@ -152,7 +153,7 @@
   }
 
   function sourceFor(video) {
-    return video.src || (window.VISTA_SOURCES || {})[video.id] || "";
+    return video.src || (window.YT_SOURCES || {})[video.id] || "";
   }
 
   function canCapture(src) {
@@ -223,7 +224,7 @@
 
   /* ---------- Local file storage (IndexedDB) ---------- */
 
-  const MEDIA_DB = "vista-media";
+  const MEDIA_DB = "yt-media";
   const MEDIA_STORE = "files";
 
   function openMediaDB() {
@@ -308,29 +309,67 @@
           finish({ duration, poster: "" });
           return;
         }
-        // Grab a frame a moment in, when there is actual picture.
-        probe.addEventListener(
-          "seeked",
-          () => {
-            let poster = "";
+
+        // Sample a few points through the clip. The first frame is often
+        // black (fades, leader frames), so keep the brightest readable frame.
+        const stops = [0.25, 0.5, 0.12, 0.7]
+          .map((fraction) => duration * fraction)
+          .filter((time) => time > 0.05);
+        if (!stops.length) stops.push(Math.min(1, duration || 1));
+
+        let best = "";
+        let bestScore = -1;
+
+        const grab = () => {
+          if (!stops.length) {
+            window.clearTimeout(timer);
+            finish({ duration, poster: best });
+            return;
+          }
+          const next = stops.shift();
+          probe.currentTime = next;
+
+          const onSeeked = () => {
             try {
               const canvas = document.createElement("canvas");
               const width = 480;
               const ratio = probe.videoHeight ? probe.videoHeight / probe.videoWidth : 0.5625;
               canvas.width = width;
               canvas.height = Math.round(width * ratio) || 270;
-              canvas.getContext("2d").drawImage(probe, 0, 0, canvas.width, canvas.height);
-              poster = canvas.toDataURL("image/jpeg", 0.72);
+              const context = canvas.getContext("2d");
+              context.drawImage(probe, 0, 0, canvas.width, canvas.height);
+
+              // Average luminance of a sparse grid, to reject black frames.
+              const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+              let total = 0;
+              let samples = 0;
+              for (let i = 0; i < data.length; i += 4 * 97) {
+                total += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                samples += 1;
+              }
+              const score = samples ? total / samples : 0;
+
+              if (score > bestScore) {
+                bestScore = score;
+                best = canvas.toDataURL("image/jpeg", 0.72);
+              }
+              // Anything reasonably lit is good enough to stop early.
+              if (score > 26) {
+                window.clearTimeout(timer);
+                finish({ duration, poster: best });
+                return;
+              }
             } catch {
-              poster = "";
+              /* Unreadable frame; try the next stop. */
             }
-            window.clearTimeout(timer);
-            finish({ duration, poster });
-          },
-          { once: true },
-        );
+            grab();
+          };
+
+          probe.addEventListener("seeked", onSeeked, { once: true });
+        };
+
         try {
-          probe.currentTime = Math.min(1.2, (duration || 2) / 3);
+          grab();
         } catch {
           window.clearTimeout(timer);
           finish({ duration, poster: "" });
@@ -367,10 +406,10 @@
 
   const SECTION_META = {
     home: {
-      eyebrow: "Your library",
-      title: "For you",
-      emptyTitle: "Nothing here yet",
-      emptyBody: "Try a different filter, or clear your search to see the full library.",
+      eyebrow: "",
+      title: "Home",
+      emptyTitle: "No videos found",
+      emptyBody: "Try a different search or category.",
     },
     shorts: {
       eyebrow: "Short form",
@@ -548,7 +587,7 @@
   }
 
   function renderChips() {
-    el.chips.innerHTML = window.VISTA_CATEGORIES.map((category) => {
+    el.chips.innerHTML = window.YT_CATEGORIES.map((category) => {
       const active = category === state.category && !state.query && !state.channel;
       return `<button class="chip${active ? " is-active" : ""}" type="button" role="tab" aria-selected="${active}" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`;
     }).join("");
@@ -702,6 +741,10 @@
     el.videoGrid.hidden = list.length === 0;
     el.emptyState.hidden = list.length !== 0;
 
+    // YouTube's home feed has no title block, only the chip row. Sections
+    // like History and Subscriptions do keep a heading.
+    el.feedHead.hidden = !state.query && !state.channel && state.section === "home";
+
     if (list.length === 0) {
       const copy = emptyCopy();
       el.emptyTitle.textContent = copy.title;
@@ -723,9 +766,9 @@
               <p class="comment__meta"><strong>${escapeHtml(comment.name)}</strong><span>${escapeHtml(comment.time)}</span></p>
               <p class="comment__text">${escapeHtml(comment.text)}</p>
               <div class="comment__actions">
-                <button type="button" data-toast="Comment likes are a placeholder.">Like</button>
+                <button type="button" data-toast="Comment likes">Like</button>
                 <span>${escapeHtml(String(comment.likes || 0))}</span>
-                <button type="button" data-toast="Replies are a placeholder.">Reply</button>
+                <button type="button" data-toast="Replies">Reply</button>
               </div>
             </div>
           </article>
@@ -771,7 +814,7 @@
         <div class="player__shade"></div>
         <div class="player__empty-copy">
           <strong>No stream attached</strong>
-          <span>This entry is a live placeholder. Paste a direct stream URL to make it play.</span>
+          <span>This stream has no source yet. Add a video URL to play it.</span>
           <button class="btn btn--accent" type="button" data-watch-action="attach">Attach a stream</button>
         </div>
       `;
@@ -823,9 +866,8 @@
     return `
       <div class="watch__topline">
         <button class="back-btn" type="button" data-watch-action="back">
-          ${icon("arrowLeft")}<span>Back to feed</span>
+          ${icon("arrowLeft")}<span>Back</span>
         </button>
-        <span class="watch-kicker">Now playing</span>
       </div>
 
       <div class="player" id="watchPlayer" data-video-id="${video.id}">
@@ -871,7 +913,7 @@
           <button class="subscribe-btn${subscribed ? " is-subscribed" : ""}" type="button" data-watch-action="subscribe">
             ${subscribed ? "Subscribed" : "Subscribe"}
           </button>
-          <button class="icon-btn icon-btn--bordered" type="button" data-toast="Channel notifications are a placeholder." aria-label="Channel notifications">${icon("bell")}</button>
+          <button class="icon-btn icon-btn--bordered" type="button" data-toast="Channel notifications" aria-label="Channel notifications">${icon("bell")}</button>
         </div>
       </div>
 
@@ -885,7 +927,7 @@
       <section class="comments" aria-labelledby="commentsTitle">
         <div class="comments__head">
           <h2 id="commentsTitle"><span id="commentCount">${comments.length}</span> Comments</h2>
-          <button type="button" data-toast="Comment sorting is a placeholder.">Sort by ${icon("chevronDown")}</button>
+          <button type="button" data-toast="Sort by newest">Sort by ${icon("chevronDown")}</button>
         </div>
         <form class="comment-form" id="commentForm">
           <span class="avatar avatar--sm avatar--me">JD</span>
@@ -1131,7 +1173,7 @@
     el.watchView.hidden = true;
     el.homeView.hidden = false;
     document.body.classList.remove("is-watching");
-    document.title = "Vista · Your library";
+    document.title = "YouTube";
     renderFeed();
     updateNav();
   }
@@ -1147,7 +1189,7 @@
     const video = library().find((item) => item.id === id);
     if (!video) {
       goHome();
-      toast("That video is not in the placeholder library.");
+      toast("Video unavailable.");
       return;
     }
 
@@ -1155,7 +1197,7 @@
     el.homeView.hidden = true;
     el.watchView.hidden = false;
     document.body.classList.add("is-watching");
-    document.title = `${video.title} · Vista`;
+    document.title = `${video.title} - YouTube`;
     renderWatch(video);
     updateNav();
     closePopovers();
@@ -1524,7 +1566,7 @@
     }
 
     if (action === "more") {
-      toast("More actions are a placeholder.");
+      toast("More");
     }
   }
 
@@ -1619,7 +1661,7 @@
     ];
     input.value = "";
     renderCommentList(video);
-    toast("Comment added to the prototype.");
+    toast("Comment added.");
   }
 
   function updateNotifBadge() {
@@ -1753,7 +1795,7 @@
       if (dot) dot.hidden = true;
       updateNotifBadge();
       closePopovers();
-      toast("Notification opened in the prototype.");
+      toast("Notification");
     });
 
     document.addEventListener("click", (event) => {
@@ -1864,8 +1906,7 @@
     if (!file) {
       state.pendingFile = null;
       el.dropzone.classList.remove("has-file");
-      el.dropLabel.textContent = "Drop a video here";
-      el.dropHint.textContent = "or click to choose — MP4, WebM, MOV, OGG";
+      resetDropzone();
       return;
     }
     state.pendingFile = file;
@@ -1874,7 +1915,7 @@
     const size = file.size >= 1048576
       ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
       : `${Math.max(1, Math.round(file.size / 1024))} KB`;
-    el.dropHint.textContent = `${size} · ready to add`;
+    el.dropHint.textContent = `${size} · ready to upload`;
     if (el.videoTitle && !el.videoTitle.value.trim()) {
       el.videoTitle.value = file.name.replace(/\.[^.]+$/, "");
     }
@@ -1911,6 +1952,12 @@
     }
   }
 
+  function resetDropzone() {
+    if (el.dropLabel) el.dropLabel.textContent = "Drag and drop video files to upload";
+    if (el.dropHint) el.dropHint.textContent = "Your videos stay private until you publish them.";
+    el.dropzone?.classList.remove("has-file", "is-dragging");
+  }
+
   function openCreateDialog(tab = "file") {
     closePopovers();
     closeMenus();
@@ -1920,9 +1967,7 @@
     if (el.videoFile) el.videoFile.value = "";
     if (el.videoUrl) el.videoUrl.value = "";
     if (el.videoTitle) el.videoTitle.value = "";
-    if (el.dropLabel) el.dropLabel.textContent = "Drop a video here";
-    if (el.dropHint) el.dropHint.textContent = "or click to choose — MP4, WebM, MOV, OGG";
-    el.dropzone?.classList.remove("has-file", "is-dragging");
+    resetDropzone();
     if (typeof el.createDialog.showModal === "function") {
       el.createDialog.showModal();
     } else {

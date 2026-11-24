@@ -1,4 +1,4 @@
-/* Placeholder library. Replace this array (or point it at your API) when you add real data. */
+/* Video library. Replace this array (or point it at your API) when you add real data. */
 window.VIDEO_DATA = [
   {
     id: "quiet-grid",
@@ -18,7 +18,7 @@ window.VIDEO_DATA = [
     glyph: "grid",
     likeCount: 8421,
     description:
-      "A short walkthrough of the small decisions that make a dense screen feel quiet: fewer competing accents, a tighter type scale, and one clear next action. This is placeholder copy for your own video description.",
+      "A short walkthrough of the small decisions that make a dense screen feel quiet: fewer competing accents, a tighter type scale, and one clear next action.",
   },
   {
     id: "lowlight-vol-4",
@@ -98,7 +98,7 @@ window.VIDEO_DATA = [
     glyph: "plane",
     likeCount: 2280,
     description:
-      "A quiet drive down the coast with no itinerary. Placeholder notes for the route, the stops, and the camera kit used here.",
+      "A quiet drive down the coast with no itinerary. Notes on the route, the stops, and the camera kit used here.",
   },
   {
     id: "print-room-live",
@@ -119,7 +119,7 @@ window.VIDEO_DATA = [
     likeCount: 940,
     live: true,
     description:
-      "A live work session from the studio. This placeholder card can become a live stream, a premiere, or a scheduled watch party.",
+      "A live work session from the studio. Streaming live from the studio.",
   },
   {
     id: "second-act",
@@ -199,7 +199,7 @@ window.VIDEO_DATA = [
     glyph: "cooking",
     likeCount: 4550,
     description:
-      "A simple bread, a hot pan, and the little details that make the crust work. Placeholder recipe notes go here.",
+      "A simple bread, a hot pan, and the little details that make the crust work. Recipe notes, timings, and substitutions below.",
   },
   {
     id: "after-hours-set",
@@ -340,7 +340,7 @@ window.VIDEO_DATA = [
     likeCount: 620,
     live: true,
     description:
-      "A live session from the studio floor. Placeholder stream copy, ready to be replaced with your own live event details.",
+      "A live session from the studio floor. Live from the studio floor.",
   },
   {
     id: "3am-edit",
@@ -368,9 +368,9 @@ window.VIDEO_DATA = [
    These are public sample clips used so the player works out of the box.
    Replace them with your own URLs, or set `src` directly on an entry above
    (an inline `src` always wins over this map). Any direct MP4/WebM URL works.
-   Entries with no source at all (the two live placeholders) show an
+   Entries with no source at all (the two live entries) show an
    "attach a stream" state on the watch page instead of a fake play button. */
-window.VISTA_SOURCES = {
+window.YT_SOURCES = {
   "quiet-grid": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
   "lowlight-vol-4": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
   "12-core-handheld": "https://vjs.zencdn.net/v/oceans.mp4",
@@ -392,12 +392,12 @@ window.VISTA_SOURCES = {
 /* Origins that send Access-Control-Allow-Origin, so a video frame can be
    copied to a canvas and turned into a real thumbnail. Anything else keeps
    the generated CSS artwork instead. */
-window.VISTA_CORS_ORIGINS = [
+window.YT_CORS_ORIGINS = [
   "https://interactive-examples.mdn.mozilla.net",
   "https://vjs.zencdn.net",
 ];
 
-window.VISTA_CATEGORIES = [
+window.YT_CATEGORIES = [
   "All",
   "Uploads",
   "Design",

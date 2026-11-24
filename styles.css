@@ -197,23 +197,10 @@ img {
 }
 
 .brand__mark {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  color: var(--accent-ink);
-  background: var(--accent);
-  clip-path: polygon(0 0, 100% 0, 100% 72%, 72% 100%, 0 100%);
-  box-shadow: var(--shadow-1);
-}
-
-.brand__dot {
-  width: 5px;
-  height: 5px;
-  margin-left: -2px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: var(--accent);
+  width: 28px;
+  height: 20px;
+  display: block;
+  flex: none;
 }
 
 .icon-btn {
@@ -2561,8 +2548,7 @@ body.compact-grid .video-grid {
     padding: 0 12px;
   }
 
-  .brand__word,
-  .brand__dot {
+  .brand__word {
     display: none;
   }
 
@@ -3149,4 +3135,31 @@ body.compact-grid .video-grid {
   color: rgba(255, 255, 255, 0.68);
   font-size: 12px;
   line-height: 1.55;
+}
+
+/* Chips bar tools (Filters + density) */
+.chips-bar__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.chips-bar__tools .icon-btn--bordered {
+  width: 34px;
+  height: 34px;
+}
+
+/* Sidebar footer */
+.sidebar__copy {
+  margin: 12px 0 0;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+/* YouTube's mobile web keeps the chip row alone: no Filters or density. */
+@media (max-width: 760px) {
+  .chips-bar__tools {
+    display: none;
+  }
 }
