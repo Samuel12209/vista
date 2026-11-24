@@ -3113,3 +3113,40 @@ body.compact-grid .video-grid {
 .menu-danger .icon {
   color: var(--accent);
 }
+
+/* Stream that failed to load */
+.player.is-failed .player__video {
+  visibility: hidden;
+}
+
+.player.is-failed .player__bar,
+.player.is-failed .player__bigplay {
+  display: none;
+}
+
+.player__error {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(8, 8, 8, 0.94);
+  color: #fff;
+}
+
+.player__error strong {
+  font-family: var(--display);
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.player__error span {
+  max-width: 360px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  line-height: 1.55;
+}

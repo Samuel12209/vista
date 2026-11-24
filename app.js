@@ -992,6 +992,18 @@
     paintRate();
     paintTime();
 
+    // If the stream never arrives, say so instead of showing a dead play button.
+    const loadTimer = window.setTimeout(() => {
+      if (media.readyState === 0 && !media.error) showPlayerError(video);
+    }, 15000);
+
+    media.addEventListener("loadedmetadata", () => window.clearTimeout(loadTimer), { once: true });
+
+    media.addEventListener("error", () => {
+      window.clearTimeout(loadTimer);
+      showPlayerError(video);
+    }, { once: true });
+
     // Resume where the viewer left off.
     media.addEventListener(
       "loadedmetadata",
@@ -1076,6 +1088,22 @@
     }
 
     player.dataset.ready = "true";
+  }
+
+  function showPlayerError(video) {
+    const player = $("#watchPlayer", el.watchMain);
+    if (!player || player.dataset.failed === "true") return;
+    player.dataset.failed = "true";
+    player.classList.add("is-failed");
+
+    const notice = document.createElement("div");
+    notice.className = "player__error";
+    notice.innerHTML = `
+      <strong>This stream did not load</strong>
+      <span>The link may be offline, or it blocks embedding. Paste a direct MP4 or WebM URL instead.</span>
+      <button class="btn btn--accent" type="button" data-watch-action="attach">Use a different source</button>
+    `;
+    player.appendChild(notice);
   }
 
   function playNext() {
