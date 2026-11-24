@@ -17,7 +17,6 @@ window.VIDEO_DATA = [
     palette: ["#dbe7df", "#8eb4a4", "#24463e"],
     glyph: "grid",
     likeCount: 8421,
-    progress: 42,
     description:
       "A short walkthrough of the small decisions that make a dense screen feel quiet: fewer competing accents, a tighter type scale, and one clear next action. This is placeholder copy for your own video description.",
   },
@@ -58,7 +57,6 @@ window.VIDEO_DATA = [
     palette: ["#c9d7f0", "#6e8fc7", "#1d2b4a"],
     glyph: "cpu",
     likeCount: 15400,
-    progress: 18,
     description:
       "More cores do not automatically mean a better handheld. A look at thermals, frame pacing, and the parts of the spec sheet that actually reach the player.",
   },
@@ -79,7 +77,6 @@ window.VIDEO_DATA = [
     palette: ["#e9e0c8", "#a9b06f", "#46522f"],
     glyph: "cooking",
     likeCount: 6730,
-    progress: 71,
     description:
       "A weeknight recipe with one pan, a handful of pantry staples, and a finish that tastes like it took longer than it did. Full ingredient list in the description.",
   },
@@ -367,8 +364,42 @@ window.VIDEO_DATA = [
   },
 ];
 
+/* Real, playable demo media.
+   These are public sample clips used so the player works out of the box.
+   Replace them with your own URLs, or set `src` directly on an entry above
+   (an inline `src` always wins over this map). Any direct MP4/WebM URL works.
+   Entries with no source at all (the two live placeholders) show an
+   "attach a stream" state on the watch page instead of a fake play button. */
+window.VISTA_SOURCES = {
+  "quiet-grid": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+  "lowlight-vol-4": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+  "12-core-handheld": "https://vjs.zencdn.net/v/oceans.mp4",
+  "brown-butter-orzo": "https://media.w3.org/2010/05/sintel/trailer.mp4",
+  "coast-road": "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_1MB.mp4",
+  "second-act": "https://media.w3.org/2010/05/bunny/trailer.mp4",
+  "tiny-garden": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4",
+  "how-tides-work": "https://media.w3.org/2010/05/video/movie_300.mp4",
+  "bread-salt-pan": "https://cdn.plyr.io/static/demo/View_From_A_Blue_Moon_Trailer-576p.mp4",
+  "after-hours-set": "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4",
+  "make-it-plain": "https://www.w3schools.com/html/mov_bbb.mp4",
+  "headphone-jack": "https://test-videos.co.uk/vids/sintel/mp4/h264/720/Sintel_720_10s_1MB.mp4",
+  "city-field-recording": "https://filesamples.com/samples/video/mp4/sample_640x360.mp4",
+  "four-minute-match": "https://cdn.plyr.io/static/demo/View_From_A_Blue_Moon_Trailer-720p.mp4",
+  "why-maps-lie": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+  "3am-edit": "https://media.w3.org/2010/05/bunny/trailer.mp4",
+};
+
+/* Origins that send Access-Control-Allow-Origin, so a video frame can be
+   copied to a canvas and turned into a real thumbnail. Anything else keeps
+   the generated CSS artwork instead. */
+window.VISTA_CORS_ORIGINS = [
+  "https://interactive-examples.mdn.mozilla.net",
+  "https://vjs.zencdn.net",
+];
+
 window.VISTA_CATEGORIES = [
   "All",
+  "Uploads",
   "Design",
   "Music",
   "Technology",

@@ -10,6 +10,7 @@
     />
     <title>Vista · Your library</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e7482e'/%3E%3Cpath d='M13 9.5l10 6.5-10 6.5z' fill='%23fff'/%3E%3C/svg%3E" />
   </head>
   <body>
     <header class="topbar">
@@ -225,7 +226,7 @@
               <h1 id="feedTitle">For you</h1>
             </div>
             <div class="feed-tools">
-              <span class="proto-pill"><span class="status-dot"></span>Placeholder media</span>
+              <span class="proto-pill"><span class="status-dot"></span>Demo clips</span>
               <span class="feed-count" id="feedCount">18 videos</span>
               <button class="icon-btn icon-btn--bordered" id="densityBtn" type="button" aria-label="Toggle compact grid" title="Toggle compact grid">
                 <span data-icon="grid"></span>
@@ -270,36 +271,53 @@
     <div class="sidebar-scrim" id="sidebarScrim" hidden></div>
 
     <dialog class="dialog" id="createDialog">
-      <form method="dialog" class="dialog__card">
+      <form method="dialog" class="dialog__card" id="addForm" novalidate>
         <div class="dialog__head">
           <div>
-            <p class="eyebrow">Placeholder flow</p>
-            <h2>Upload a video</h2>
+            <p class="eyebrow">Add to library</p>
+            <h2>Add a video</h2>
           </div>
           <button class="icon-btn" type="button" id="closeCreateBtn" aria-label="Close">
             <span data-icon="x"></span>
           </button>
         </div>
-        <button class="dropzone" type="button" data-toast="File picker is a placeholder. Wire up your upload endpoint here.">
-          <span class="dropzone__icon"><span data-icon="upload"></span></span>
-          <strong>Drop a file here</strong>
-          <span>or choose a file from your device</span>
-        </button>
+
+        <div class="add-tabs" role="tablist" aria-label="Video source">
+          <button class="add-tab is-active" type="button" role="tab" aria-selected="true" data-add-tab="file">
+            Upload file
+          </button>
+          <button class="add-tab" type="button" role="tab" aria-selected="false" data-add-tab="url">
+            Paste URL
+          </button>
+        </div>
+
+        <div class="add-pane" data-add-pane="file">
+          <label class="dropzone" id="dropzone" for="videoFile">
+            <span class="dropzone__icon"><span data-icon="upload"></span></span>
+            <strong id="dropLabel">Drop a video here</strong>
+            <span id="dropHint">or click to choose — MP4, WebM, MOV, OGG</span>
+            <input id="videoFile" type="file" accept="video/*" hidden />
+          </label>
+        </div>
+
+        <div class="add-pane" data-add-pane="url" hidden>
+          <label class="field">
+            <span>Video URL</span>
+            <input id="videoUrl" type="url" placeholder="https://example.com/clip.mp4" autocomplete="off" />
+          </label>
+          <p class="field-note">A direct MP4 or WebM link plays everywhere. HLS <code>.m3u8</code> streams need Safari.</p>
+        </div>
+
         <label class="field">
           <span>Title</span>
-          <input type="text" placeholder="Give your video a name" />
+          <input id="videoTitle" type="text" placeholder="Leave blank to use the file name" autocomplete="off" />
         </label>
-        <label class="field">
-          <span>Visibility</span>
-          <select>
-            <option>Private</option>
-            <option>Unlisted</option>
-            <option>Public</option>
-          </select>
-        </label>
+
+        <p class="add-status" id="addStatus" hidden></p>
+
         <div class="dialog__foot">
           <button class="btn btn--quiet" type="button" id="cancelCreateBtn">Cancel</button>
-          <button class="btn btn--dark" type="submit" data-toast="Draft saved locally in the prototype.">Save draft</button>
+          <button class="btn btn--dark" type="submit" id="addSubmit">Add video</button>
         </div>
       </form>
     </dialog>

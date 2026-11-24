@@ -34,6 +34,15 @@
     feedCount: $("#feedCount"),
     densityBtn: $("#densityBtn"),
     createDialog: $("#createDialog"),
+    addForm: $("#addForm"),
+    videoFile: $("#videoFile"),
+    videoUrl: $("#videoUrl"),
+    videoTitle: $("#videoTitle"),
+    addStatus: $("#addStatus"),
+    addSubmit: $("#addSubmit"),
+    dropzone: $("#dropzone"),
+    dropLabel: $("#dropLabel"),
+    dropHint: $("#dropHint"),
     closeCreateBtn: $("#closeCreateBtn"),
     cancelCreateBtn: $("#cancelCreateBtn"),
     toastStack: $("#toastStack"),
@@ -47,7 +56,31 @@
     liked: "vista.liked",
     disliked: "vista.disliked",
     subscribed: "vista.subscribed",
+    progress: "vista.progress",
+    posters: "vista.posters",
+    added: "vista.added",
+    volume: "vista.volume",
+    rate: "vista.rate",
   };
+
+  const CORS_ORIGINS = window.VISTA_CORS_ORIGINS || [];
+
+  function readJSON(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function writeJSON(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* Quota or private mode; the session still works in memory. */
+    }
+  }
 
   const INITIAL_SUBSCRIPTIONS = [
     "Field Notes",
@@ -104,7 +137,221 @@
     disliked: readSet(STORAGE.disliked, []),
     subscribed: readSet(STORAGE.subscribed, INITIAL_SUBSCRIPTIONS),
     comments: {},
+    userVideos: [],
+    objectUrls: new Map(),
+    pendingFile: null,
+    progress: readJSON(STORAGE.progress, {}),
+    posters: readJSON(STORAGE.posters, {}),
   };
+
+  /* ---------- Library ---------- */
+
+  // Videos the user added come first, then the demo set.
+  function library() {
+    return [...state.userVideos, ...window.VIDEO_DATA];
+  }
+
+  function sourceFor(video) {
+    return video.src || (window.VISTA_SOURCES || {})[video.id] || "";
+  }
+
+  function canCapture(src) {
+    if (!src) return false;
+    if (src.startsWith("blob:") || src.startsWith("data:")) return true;
+    try {
+      return CORS_ORIGINS.includes(new URL(src).origin);
+    } catch {
+      return false;
+    }
+  }
+
+  function posterFor(video) {
+    return state.posters[video.id] || video.poster || "";
+  }
+
+  function savePoster(id, dataUrl) {
+    if (!dataUrl) return;
+    // Keep the cache bounded so localStorage cannot fill up.
+    const keys = Object.keys(state.posters);
+    if (keys.length > 60) keys.slice(0, 20).forEach((key) => delete state.posters[key]);
+    state.posters[id] = dataUrl;
+    writeJSON(STORAGE.posters, state.posters);
+  }
+
+  function progressFor(id) {
+    const entry = state.progress[id];
+    if (!entry || !entry.d) return 0;
+    return Math.min(100, Math.max(0, (entry.t / entry.d) * 100));
+  }
+
+  function saveProgress(id, time, duration) {
+    if (!duration || !isFinite(duration)) return;
+    state.progress[id] = { t: time, d: duration };
+    writeJSON(STORAGE.progress, state.progress);
+  }
+
+  // Demo entries carry display durations for the design. Once a clip is
+  // reachable we replace them with the real length so the card never lies.
+  let durationsHydrated = false;
+
+  async function hydrateDurations() {
+    if (durationsHydrated) return;
+    durationsHydrated = true;
+
+    const targets = window.VIDEO_DATA.filter((video) => sourceFor(video) && !video.length);
+    const queue = [...targets];
+    let changed = false;
+
+    // Four at a time keeps the metadata requests from competing.
+    const worker = async () => {
+      while (queue.length) {
+        const video = queue.shift();
+        const src = sourceFor(video);
+        const capture = !posterFor(video) && canCapture(src);
+        const { duration, poster } = await probeMedia(src, capture);
+        if (poster) savePoster(video.id, poster);
+        if (!duration) continue;
+        video.length = duration;
+        video.duration = formatTime(duration);
+        changed = true;
+      }
+    };
+
+    await Promise.all(Array.from({ length: 4 }, worker));
+    if (changed) renderFeed();
+  }
+
+  /* ---------- Local file storage (IndexedDB) ---------- */
+
+  const MEDIA_DB = "vista-media";
+  const MEDIA_STORE = "files";
+
+  function openMediaDB() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) {
+        reject(new Error("IndexedDB is unavailable in this browser."));
+        return;
+      }
+      const request = indexedDB.open(MEDIA_DB, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(MEDIA_STORE)) db.createObjectStore(MEDIA_STORE);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function putFile(id, file) {
+    const db = await openMediaDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(MEDIA_STORE, "readwrite");
+      tx.objectStore(MEDIA_STORE).put(file, id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  async function getFile(id) {
+    const db = await openMediaDB();
+    const blob = await new Promise((resolve, reject) => {
+      const tx = db.transaction(MEDIA_STORE, "readonly");
+      const request = tx.objectStore(MEDIA_STORE).get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return blob;
+  }
+
+  async function deleteFile(id) {
+    const db = await openMediaDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(MEDIA_STORE, "readwrite");
+      tx.objectStore(MEDIA_STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  /* ---------- Media probing ---------- */
+
+  // Reads real duration, dimensions and a poster frame from a video source.
+  function probeMedia(src, capture) {
+    return new Promise((resolve) => {
+      const probe = document.createElement("video");
+      probe.preload = "metadata";
+      probe.muted = true;
+      probe.playsInline = true;
+      if (capture && /^https?:/i.test(src)) probe.crossOrigin = "anonymous";
+      probe.src = src;
+
+      const finish = (result) => {
+        probe.removeAttribute("src");
+        probe.load();
+        resolve(result);
+      };
+
+      const timer = window.setTimeout(() => finish({ duration: 0, poster: "" }), 12000);
+
+      probe.addEventListener("error", () => {
+        window.clearTimeout(timer);
+        finish({ duration: 0, poster: "" });
+      });
+
+      probe.addEventListener("loadedmetadata", () => {
+        const duration = isFinite(probe.duration) ? probe.duration : 0;
+        if (!capture) {
+          window.clearTimeout(timer);
+          finish({ duration, poster: "" });
+          return;
+        }
+        // Grab a frame a moment in, when there is actual picture.
+        probe.addEventListener(
+          "seeked",
+          () => {
+            let poster = "";
+            try {
+              const canvas = document.createElement("canvas");
+              const width = 480;
+              const ratio = probe.videoHeight ? probe.videoHeight / probe.videoWidth : 0.5625;
+              canvas.width = width;
+              canvas.height = Math.round(width * ratio) || 270;
+              canvas.getContext("2d").drawImage(probe, 0, 0, canvas.width, canvas.height);
+              poster = canvas.toDataURL("image/jpeg", 0.72);
+            } catch {
+              poster = "";
+            }
+            window.clearTimeout(timer);
+            finish({ duration, poster });
+          },
+          { once: true },
+        );
+        try {
+          probe.currentTime = Math.min(1.2, (duration || 2) / 3);
+        } catch {
+          window.clearTimeout(timer);
+          finish({ duration, poster: "" });
+        }
+      });
+    });
+  }
+
+  function formatTime(seconds) {
+    if (!isFinite(seconds) || seconds < 0) seconds = 0;
+    const total = Math.floor(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  }
+
+  function makeId() {
+    return `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
 
   const CATEGORY_ICONS = {
     Design: "grid",
@@ -146,7 +393,7 @@
       title: "History",
       emptyTitle: "Your history is empty",
       emptyBody: "Videos you start will appear here with a progress bar.",
-      filter: (video) => Boolean(video.progress),
+      filter: (video) => progressFor(video.id) > 0,
     },
     playlists: {
       eyebrow: "Collections",
@@ -174,8 +421,8 @@
       eyebrow: "Your channel",
       title: "Your videos",
       emptyTitle: "No uploads yet",
-      emptyBody: "Uploaded videos will appear here once you connect your library.",
-      filter: () => false,
+      emptyBody: "Add a video with the Create button and it will appear here.",
+      filter: (video) => video.id.startsWith("user-"),
     },
   };
 
@@ -265,7 +512,7 @@
 
   function filteredVideos() {
     const meta = SECTION_META[state.section] || SECTION_META.home;
-    let list = window.VIDEO_DATA.filter((video) => !state.hidden.has(video.id));
+    let list = library().filter((video) => !state.hidden.has(video.id));
 
     if (meta.filter) list = list.filter(meta.filter);
     if (state.channel) list = list.filter((video) => video.channel === state.channel);
@@ -354,22 +601,29 @@
     const watchHref = `#watch/${encodeURIComponent(video.id)}`;
     const categoryIcon = CATEGORY_ICONS[video.category] || video.glyph || "film";
     const meta = video.live ? video.views : `${video.views} · ${video.age}`;
+    const poster = posterFor(video);
+    const watched = progressFor(video.id);
+    const duration = video.duration || formatTime(video.length || 0);
+    const playable = Boolean(sourceFor(video));
 
     return `
       <article class="video-card" data-id="${video.id}" style="--i: ${index}">
         <a class="thumb-link" href="${watchHref}" aria-label="Watch ${title}">
-          <div class="thumb art--${video.pattern}" style="--a: ${video.palette[0]}; --b: ${video.palette[1]}; --c: ${video.palette[2]}">
+          <div class="thumb art--${video.pattern}${poster ? " thumb--poster" : ""}" style="--a: ${video.palette[0]}; --b: ${video.palette[1]}; --c: ${video.palette[2]}">
+            ${poster ? `<img class="thumb__img" src="${escapeHtml(poster)}" alt="" loading="lazy" />` : ""}
             <span class="thumb__glyph">${icon(categoryIcon)}</span>
             <span class="thumb__tag">${category}</span>
             ${
               video.live
                 ? '<span class="thumb__live"><span class="live-dot"></span>Live</span>'
-                : `<span class="thumb__time">${escapeHtml(video.duration)}</span>`
+                : duration
+                  ? `<span class="thumb__time">${escapeHtml(duration)}</span>`
+                  : ""
             }
-            <span class="thumb__play">${icon("play")}</span>
+            ${playable ? `<span class="thumb__play">${icon("play")}</span>` : ""}
             ${
-              video.progress
-                ? `<span class="thumb__progress"><span style="width: ${Number(video.progress)}%"></span></span>`
+              watched
+                ? `<span class="thumb__progress"><span style="width: ${watched}%"></span></span>`
                 : ""
             }
           </div>
@@ -397,6 +651,13 @@
           <button type="button" role="menuitem" data-menu-action="hide" data-id="${video.id}">
             ${icon("eye")}<span>Not interested</span>
           </button>
+          ${
+            video.id.startsWith("user-")
+              ? `<button type="button" role="menuitem" class="menu-danger" data-menu-action="delete" data-id="${video.id}">
+            ${icon("trash")}<span>Remove from library</span>
+          </button>`
+              : ""
+          }
         </div>
       </article>
     `;
@@ -477,14 +738,18 @@
     const watchHref = `#watch/${encodeURIComponent(video.id)}`;
     const category = escapeHtml(video.category);
     const title = escapeHtml(video.title);
+    const poster = posterFor(video);
     return `
       <a class="related-card" href="${watchHref}">
-        <div class="related-thumb art--${video.pattern}" style="--a: ${video.palette[0]}; --b: ${video.palette[1]}; --c: ${video.palette[2]}">
+        <div class="related-thumb art--${video.pattern}${poster ? " related-thumb--poster" : ""}" style="--a: ${video.palette[0]}; --b: ${video.palette[1]}; --c: ${video.palette[2]}">
+          ${poster ? `<img class="thumb__img" src="${escapeHtml(poster)}" alt="" loading="lazy" />` : ""}
           <span class="thumb__tag">${category}</span>
           ${
             video.live
               ? '<span class="thumb__live"><span class="live-dot"></span>Live</span>'
-              : `<span class="thumb__time">${escapeHtml(video.duration)}</span>`
+              : video.duration
+                ? `<span class="thumb__time">${escapeHtml(video.duration)}</span>`
+                : ""
           }
         </div>
         <div>
@@ -496,53 +761,81 @@
     `;
   }
 
+  function playerHTML(video) {
+    const src = sourceFor(video);
+    const poster = posterFor(video);
+
+    if (!src) {
+      return `
+        <div class="player__art art--${video.pattern}" style="--a: ${video.palette[0]}; --b: ${video.palette[1]}; --c: ${video.palette[2]}"></div>
+        <div class="player__shade"></div>
+        <div class="player__empty-copy">
+          <strong>No stream attached</strong>
+          <span>This entry is a live placeholder. Paste a direct stream URL to make it play.</span>
+          <button class="btn btn--accent" type="button" data-watch-action="attach">Attach a stream</button>
+        </div>
+      `;
+    }
+
+    return `
+      <video
+        class="player__video"
+        id="realVideo"
+        preload="metadata"
+        playsinline
+        ${poster ? `poster="${escapeHtml(poster)}"` : ""}
+        ${canCapture(src) && /^https?:/i.test(src) ? 'crossorigin="anonymous"' : ""}
+      >
+        <source src="${escapeHtml(src)}" />
+      </video>
+
+      <div class="player__bigplay" id="bigPlay" data-watch-action="toggle" role="presentation">
+        <button type="button" tabindex="-1" aria-label="Play">${icon("play")}</button>
+      </div>
+
+      <div class="player__bar">
+        <input class="player__seek" id="seekBar" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek" />
+        <div class="player__row">
+          <button class="player__btn" id="playBtn" type="button" data-watch-action="toggle" aria-label="Play">${icon("play")}</button>
+          <button class="player__btn" id="muteBtn" type="button" data-watch-action="mute" aria-label="Mute">${icon("volume")}</button>
+          <input class="player__vol" id="volBar" type="range" min="0" max="100" value="100" step="1" aria-label="Volume" />
+          <span class="player__clock"><span id="curTime">0:00</span> / <span id="durTime">${video.live ? "LIVE" : "0:00"}</span></span>
+          <span class="player__spacer"></span>
+          <button class="player__btn player__rate" id="rateBtn" type="button" data-watch-action="rate" aria-label="Playback speed">1×</button>
+          <button class="player__btn" id="pipBtn" type="button" data-watch-action="pip" aria-label="Picture in picture">${icon("film")}</button>
+          <button class="player__btn" id="fsBtn" type="button" data-watch-action="fullscreen" aria-label="Fullscreen">${icon("fullscreen")}</button>
+        </div>
+      </div>
+    `;
+  }
+
   function watchDetailHTML(video) {
     const liked = state.liked.has(video.id);
     const disliked = state.disliked.has(video.id);
     const saved = state.saved.has(video.id);
     const subscribed = state.subscribed.has(video.channel);
-    const categoryIcon = CATEGORY_ICONS[video.category] || video.glyph || "film";
     const tags = video.tags
       .map((tag) => `#${escapeHtml(tag.replace(/\s+/g, ""))}`)
       .join(" ");
     const likeLabel = formatCount(video.likeCount + (liked ? 1 : 0));
     const comments = state.comments[video.id] || SAMPLE_COMMENTS;
-    const progress = Number(video.progress || 0);
 
     return `
       <div class="watch__topline">
         <button class="back-btn" type="button" data-watch-action="back">
           ${icon("arrowLeft")}<span>Back to feed</span>
         </button>
-        <span class="watch-kicker">Preview build</span>
+        <span class="watch-kicker">Now playing</span>
       </div>
 
-      <div class="player" id="watchPlayer">
-        <div class="player__art art--${video.pattern}" style="--a: ${video.palette[0]}; --b: ${video.palette[1]}; --c: ${video.palette[2]}">
-          <span class="player__shade"></span>
-          <span class="player__glyph">${icon(categoryIcon)}</span>
-          <span class="player__badge">${icon("camera")}Preview player</span>
-          <button class="player__play" type="button" data-watch-action="preview" aria-label="Play preview">
-            ${icon("play")}
-          </button>
-          <span class="player__hint">Connect your own video source in <code>app.js</code></span>
-          <div class="player__controls">
-            <button class="player__control" type="button" data-toast="Player controls are a placeholder." aria-label="Play">${icon("play")}</button>
-            <button class="player__control" type="button" data-toast="Volume is a placeholder." aria-label="Volume">${icon("volume")}</button>
-            <span class="player__time">0:00 / ${video.live ? "LIVE" : escapeHtml(video.duration)}</span>
-            <span class="player__spacer"></span>
-            <button class="player__control" type="button" data-toast="Captions are a placeholder." aria-label="Captions">${icon("captions")}</button>
-            <button class="player__control" type="button" data-toast="Player settings are a placeholder." aria-label="Settings">${icon("settings")}</button>
-            <button class="player__control" type="button" data-toast="Fullscreen is a placeholder." aria-label="Fullscreen">${icon("fullscreen")}</button>
-          </div>
-          <div class="player__timeline"><span style="width: ${progress}%"></span></div>
-        </div>
+      <div class="player" id="watchPlayer" data-video-id="${video.id}">
+        ${playerHTML(video)}
       </div>
 
       <header class="watch-head">
         <h1>${escapeHtml(video.title)}</h1>
         <div class="watch-sub">
-          <span>${escapeHtml(video.live ? video.views : video.views)}</span>
+          <span>${escapeHtml(video.views)}</span>
           <span class="meta-dot"></span>
           <span>${escapeHtml(video.age)}</span>
           <span class="meta-dot"></span>
@@ -605,13 +898,15 @@
   }
 
   function renderWatch(video) {
-    const related = window.VIDEO_DATA.filter(
+    stopPlayback();
+    const related = library().filter(
       (item) => item.id !== video.id && !state.hidden.has(item.id),
     )
       .sort((a, b) => Number(b.category === video.category) - Number(a.category === video.category))
       .slice(0, 8);
 
     el.watchMain.innerHTML = watchDetailHTML(video);
+    setupPlayer(video);
     el.watchRail.innerHTML = `
       <div class="rail-head">
         <h2>Up next</h2>
@@ -625,6 +920,175 @@
     `;
   }
 
+  function setupPlayer(video) {
+    const player = $("#watchPlayer", el.watchMain);
+    const media = $("#realVideo", el.watchMain);
+    if (!player || !media) return;
+
+    const seek = $("#seekBar", player);
+    const vol = $("#volBar", player);
+    const playBtn = $("#playBtn", player);
+    const muteBtn = $("#muteBtn", player);
+    const rateBtn = $("#rateBtn", player);
+    const bigPlay = $("#bigPlay", player);
+    const curTime = $("#curTime", player);
+    const durTime = $("#durTime", player);
+
+    const RATES = [1, 1.25, 1.5, 1.75, 2, 0.75, 0.5];
+
+    const storedVol = Number(readValue(STORAGE.volume) ?? 100);
+    const startVol = isFinite(storedVol) ? Math.min(100, Math.max(0, storedVol)) : 100;
+    media.volume = startVol / 100;
+    if (vol) vol.value = String(startVol);
+
+    const storedRate = Number(readValue(STORAGE.rate) ?? 1);
+    const startRate = RATES.includes(storedRate) ? storedRate : 1;
+    media.playbackRate = startRate;
+
+    const paintVolume = () => {
+      if (vol) vol.style.setProperty("--played", `${(media.muted ? 0 : media.volume) * 100}%`);
+      if (muteBtn) {
+        muteBtn.classList.toggle("is-active", media.muted || media.volume === 0);
+        muteBtn.setAttribute("aria-label", media.muted || media.volume === 0 ? "Unmute" : "Mute");
+      }
+    };
+
+    const paintPlayState = () => {
+      const paused = media.paused;
+      player.classList.toggle("is-paused", paused);
+      if (bigPlay) bigPlay.hidden = !paused;
+      if (playBtn) {
+        playBtn.innerHTML = icon(paused ? "play" : "pause");
+        playBtn.setAttribute("aria-label", paused ? "Play" : "Pause");
+      }
+      const bigButton = bigPlay && bigPlay.querySelector("button");
+      if (bigButton) bigButton.setAttribute("aria-label", paused ? "Play" : "Pause");
+    };
+
+    const paintRate = () => {
+      if (rateBtn) rateBtn.textContent = `${media.playbackRate}×`;
+    };
+
+    const paintTime = () => {
+      const duration = isFinite(media.duration) ? media.duration : 0;
+      if (curTime) curTime.textContent = formatTime(media.currentTime);
+      if (durTime) durTime.textContent = duration ? formatTime(duration) : "0:00";
+
+      const playedPct = duration ? (media.currentTime / duration) * 100 : 0;
+      if (seek) {
+        seek.value = String(Math.round(playedPct * 10));
+        seek.style.setProperty("--played", `${playedPct}%`);
+      }
+
+      if (media.buffered.length) {
+        const bufferedEnd = media.buffered.end(media.buffered.length - 1);
+        const bufferedPct = duration ? (bufferedEnd / duration) * 100 : 0;
+        if (seek) seek.style.setProperty("--buffered", `${bufferedPct}%`);
+      }
+    };
+
+    paintVolume();
+    paintPlayState();
+    paintRate();
+    paintTime();
+
+    // Resume where the viewer left off.
+    media.addEventListener(
+      "loadedmetadata",
+      () => {
+        paintTime();
+        const saved = state.progress[video.id];
+        if (saved && saved.t > 3 && saved.d - saved.t > 4) {
+          media.currentTime = saved.t;
+          toast(`Resumed at ${formatTime(saved.t)}.`);
+        }
+        // Keep the card's duration honest once we know the real value.
+        if (isFinite(media.duration) && media.duration > 0) {
+          const entry = library().find((item) => item.id === video.id);
+          if (entry) entry.length = media.duration;
+        }
+      },
+      { once: true },
+    );
+
+    let lastSave = 0;
+    media.addEventListener("timeupdate", () => {
+      paintTime();
+      const now = performance.now();
+      if (now - lastSave > 1000) {
+        lastSave = now;
+        saveProgress(video.id, media.currentTime, media.duration);
+      }
+    });
+
+    media.addEventListener("play", paintPlayState);
+    media.addEventListener("pause", paintPlayState);
+    media.addEventListener("ended", () => {
+      paintPlayState();
+      saveProgress(video.id, 0, media.duration);
+      if (state.autoplay) playNext();
+    });
+    media.addEventListener("volumechange", paintVolume);
+    media.addEventListener("ratechange", paintRate);
+    media.addEventListener("click", () => {
+      if (media.paused) media.play().catch(() => {});
+      else media.pause();
+    });
+
+    if (seek) {
+      seek.addEventListener("input", () => {
+        const duration = isFinite(media.duration) ? media.duration : 0;
+        if (!duration) return;
+        media.currentTime = (Number(seek.value) / 1000) * duration;
+        paintTime();
+      });
+    }
+
+    if (vol) {
+      vol.addEventListener("input", () => {
+        const value = Number(vol.value);
+        media.volume = value / 100;
+        media.muted = value === 0;
+        persistValue(STORAGE.volume, String(value));
+        paintVolume();
+      });
+    }
+
+    // Pull a real frame out of the video and use it as the thumbnail.
+    if (!posterFor(video) && canCapture(sourceFor(video))) {
+      const grab = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const width = 480;
+          const ratio = media.videoWidth ? media.videoHeight / media.videoWidth : 0.5625;
+          canvas.width = width;
+          canvas.height = Math.round(width * ratio) || 270;
+          canvas.getContext("2d").drawImage(media, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          savePoster(video.id, dataUrl);
+          if (!media.getAttribute("poster")) media.setAttribute("poster", dataUrl);
+        } catch {
+          /* Frame is not readable; the CSS artwork stays. */
+        }
+      };
+      if (media.readyState >= 2) grab();
+      else media.addEventListener("loadeddata", grab, { once: true });
+    }
+
+    player.dataset.ready = "true";
+  }
+
+  function playNext() {
+    const current = state.watching;
+    if (!current) return;
+    const next = library().find(
+      (item) => item.id !== current.id && sourceFor(item) && !state.hidden.has(item.id),
+    );
+    if (!next) return;
+    toast(`Up next: ${next.title}`);
+    location.hash = `watch/${encodeURIComponent(next.id)}`;
+  }
+
   function renderCommentList(video) {
     const list = state.comments[video.id] || SAMPLE_COMMENTS;
     const listNode = $("#commentList");
@@ -634,6 +1098,7 @@
   }
 
   function showHome() {
+    stopPlayback();
     state.watching = null;
     el.watchView.hidden = true;
     el.homeView.hidden = false;
@@ -651,7 +1116,7 @@
   }
 
   function openWatch(id) {
-    const video = window.VIDEO_DATA.find((item) => item.id === id);
+    const video = library().find((item) => item.id === id);
     if (!video) {
       goHome();
       toast("That video is not in the placeholder library.");
@@ -860,21 +1325,61 @@
     button.textContent = subscribed ? "Subscribed" : "Subscribe";
   }
 
-  function togglePreview() {
-    const player = $("#watchPlayer", el.watchMain);
-    const button = $('[data-watch-action="preview"]', el.watchMain);
-    const timeline = $(".player__timeline span", el.watchMain);
-    if (!player || !button) return;
-    const playing = !player.classList.contains("is-playing");
-    player.classList.toggle("is-playing", playing);
-    button.innerHTML = icon(playing ? "pause" : "play");
-    button.setAttribute("aria-label", playing ? "Pause preview" : "Play preview");
-    if (timeline) {
-      timeline.style.transitionDuration = playing ? "18s" : "0.25s";
-      timeline.style.width = playing ? "100%" : "0%";
+  function currentMedia() {
+    return $("#realVideo", el.watchMain);
+  }
+
+  function stopPlayback() {
+    const media = currentMedia();
+    if (media && !media.paused) media.pause();
+  }
+
+  function togglePlayback() {
+    const media = currentMedia();
+    if (!media) return;
+    if (media.paused) media.play().catch(() => toast("This browser blocked playback."));
+    else media.pause();
+  }
+
+  function toggleMute() {
+    const media = currentMedia();
+    if (!media) return;
+    media.muted = !media.muted;
+    if (!media.muted && media.volume === 0) media.volume = 0.6;
+  }
+
+  function cycleRate() {
+    const media = currentMedia();
+    if (!media) return;
+    const rates = [1, 1.25, 1.5, 1.75, 2, 0.75, 0.5];
+    const next = rates[(rates.indexOf(media.playbackRate) + 1) % rates.length] ?? 1;
+    media.playbackRate = next;
+    persistValue(STORAGE.rate, String(next));
+  }
+
+  async function togglePip() {
+    const media = currentMedia();
+    if (!media) return;
+    if (!document.pictureInPictureEnabled) {
+      toast("Picture-in-picture is not supported here.");
+      return;
     }
-    if (playing) {
-      toast("Preview mode — connect a real video source in app.js.");
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      else await media.requestPictureInPicture();
+    } catch {
+      toast("Picture-in-picture was blocked.");
+    }
+  }
+
+  async function toggleFullscreen() {
+    const player = $("#watchPlayer", el.watchMain);
+    if (!player) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await player.requestFullscreen();
+    } catch {
+      toast("Fullscreen was blocked.");
     }
   }
 
@@ -888,8 +1393,33 @@
       return;
     }
 
-    if (action === "preview") {
-      togglePreview();
+    if (action === "toggle") {
+      togglePlayback();
+      return;
+    }
+
+    if (action === "mute") {
+      toggleMute();
+      return;
+    }
+
+    if (action === "rate") {
+      cycleRate();
+      return;
+    }
+
+    if (action === "pip") {
+      togglePip();
+      return;
+    }
+
+    if (action === "fullscreen") {
+      toggleFullscreen();
+      return;
+    }
+
+    if (action === "attach") {
+      openCreateDialog("url");
       return;
     }
 
@@ -971,7 +1501,7 @@
   }
 
   function handleMenuAction(action, id) {
-    const video = window.VIDEO_DATA.find((item) => item.id === id);
+    const video = library().find((item) => item.id === id);
     if (!video) return;
 
     if (action === "save") {
@@ -997,7 +1527,42 @@
       if (state.watching && state.watching.id === id) goHome();
       renderFeed();
       toast("Hidden from this session. Refresh to bring it back.");
+      return;
     }
+
+    if (action === "delete") {
+      closeMenus();
+      removeUserVideo(id);
+    }
+  }
+
+  async function removeUserVideo(id) {
+    state.userVideos = state.userVideos.filter((item) => item.id !== id);
+    writeJSON(
+      STORAGE.added,
+      state.userVideos.map(({ objectUrl, ...rest }) => rest),
+    );
+
+    const url = state.objectUrls.get(id);
+    if (url) {
+      URL.revokeObjectURL(url);
+      state.objectUrls.delete(id);
+    }
+
+    delete state.posters[id];
+    writeJSON(STORAGE.posters, state.posters);
+    delete state.progress[id];
+    writeJSON(STORAGE.progress, state.progress);
+
+    try {
+      await deleteFile(id);
+    } catch {
+      /* Nothing stored, or storage is unavailable. */
+    }
+
+    if (state.watching && state.watching.id === id) goHome();
+    renderFeed();
+    toast("Removed from your library.");
   }
 
   function handleCommentSubmit(event) {
@@ -1098,12 +1663,48 @@
       toast(state.compact ? "Compact grid on." : "Comfortable grid on.");
     });
 
-    el.createBtn.addEventListener("click", openCreateDialog);
-    el.mobileCreateBtn.addEventListener("click", openCreateDialog);
+    el.createBtn.addEventListener("click", () => openCreateDialog("file"));
+    el.mobileCreateBtn.addEventListener("click", () => openCreateDialog("file"));
     el.closeCreateBtn.addEventListener("click", () => el.createDialog.close());
     el.cancelCreateBtn.addEventListener("click", () => el.createDialog.close());
     el.createDialog.addEventListener("click", (event) => {
       if (event.target === el.createDialog) el.createDialog.close();
+    });
+
+    el.addForm.addEventListener("submit", handleAddSubmit);
+
+    el.addForm.addEventListener("click", (event) => {
+      const tab = event.target.closest("[data-add-tab]");
+      if (tab) setAddTab(tab.dataset.addTab);
+    });
+
+    el.videoFile.addEventListener("change", () => {
+      showPickedFile(el.videoFile.files[0]);
+    });
+
+    el.dropzone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      el.dropzone.classList.add("is-dragging");
+    });
+
+    el.dropzone.addEventListener("dragleave", () => {
+      el.dropzone.classList.remove("is-dragging");
+    });
+
+    el.dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      el.dropzone.classList.remove("is-dragging");
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) return;
+      if (el.videoFile.files && event.dataTransfer.files.length) {
+        try {
+          el.videoFile.files = event.dataTransfer.files;
+        } catch {
+          /* Some browsers refuse assignment; keep the dropped file in memory. */
+        }
+      }
+      state.pendingFile = file;
+      showPickedFile(file);
     });
 
     el.notifBtn.addEventListener("click", () => togglePopover(el.notifPanel, el.notifBtn));
@@ -1210,9 +1811,90 @@
     window.addEventListener("hashchange", handleHash);
   }
 
-  function openCreateDialog() {
+  /* ---------- Add video ---------- */
+
+  function setAddTab(tab) {
+    $$("[data-add-tab]").forEach((button) => {
+      const active = button.dataset.addTab === tab;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    $$("[data-add-pane]").forEach((pane) => {
+      pane.hidden = pane.dataset.addPane !== tab;
+    });
+    el.addForm.dataset.tab = tab;
+  }
+
+  function setAddStatus(message, isError) {
+    if (!el.addStatus) return;
+    el.addStatus.hidden = !message;
+    el.addStatus.textContent = message || "";
+    el.addStatus.classList.toggle("is-error", Boolean(isError));
+  }
+
+  function showPickedFile(file) {
+    if (!file) {
+      state.pendingFile = null;
+      el.dropzone.classList.remove("has-file");
+      el.dropLabel.textContent = "Drop a video here";
+      el.dropHint.textContent = "or click to choose — MP4, WebM, MOV, OGG";
+      return;
+    }
+    state.pendingFile = file;
+    el.dropzone.classList.add("has-file");
+    el.dropLabel.textContent = file.name;
+    const size = file.size >= 1048576
+      ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+    el.dropHint.textContent = `${size} · ready to add`;
+    if (el.videoTitle && !el.videoTitle.value.trim()) {
+      el.videoTitle.value = file.name.replace(/\.[^.]+$/, "");
+    }
+  }
+
+  async function handleAddSubmit(event) {
+    event.preventDefault();
+    if (el.addForm.dataset.busy === "true") return;
+
+    const tab = el.addForm.dataset.tab || "file";
+    el.addForm.dataset.busy = "true";
+    el.addSubmit.disabled = true;
+
+    try {
+      if (tab === "url") {
+        const url = el.videoUrl.value.trim();
+        if (!url) {
+          setAddStatus("Paste a video URL first.", true);
+          return;
+        }
+        await addVideoFromUrl(url);
+        return;
+      }
+
+      const file = state.pendingFile || el.videoFile.files[0];
+      if (!file) {
+        setAddStatus("Choose a file or drop one onto the box.", true);
+        return;
+      }
+      await addVideoFromFile(file);
+    } finally {
+      el.addForm.dataset.busy = "false";
+      el.addSubmit.disabled = false;
+    }
+  }
+
+  function openCreateDialog(tab = "file") {
     closePopovers();
     closeMenus();
+    setAddTab(tab);
+    setAddStatus("");
+    state.pendingFile = null;
+    if (el.videoFile) el.videoFile.value = "";
+    if (el.videoUrl) el.videoUrl.value = "";
+    if (el.videoTitle) el.videoTitle.value = "";
+    if (el.dropLabel) el.dropLabel.textContent = "Drop a video here";
+    if (el.dropHint) el.dropHint.textContent = "or click to choose — MP4, WebM, MOV, OGG";
+    el.dropzone?.classList.remove("has-file", "is-dragging");
     if (typeof el.createDialog.showModal === "function") {
       el.createDialog.showModal();
     } else {
@@ -1220,13 +1902,162 @@
     }
   }
 
-  function init() {
+  function baseEntry(overrides) {
+    return {
+      id: makeId(),
+      channel: "Your uploads",
+      initials: "ME",
+      channelColor: "#2e4c8a",
+      verified: false,
+      subscribers: "—",
+      views: "New",
+      age: "Just added",
+      category: "Uploads",
+      tags: ["upload", "local"],
+      pattern: "frame",
+      palette: ["#d7dee8", "#8fa4bd", "#28303d"],
+      glyph: "film",
+      likeCount: 0,
+      description: "Added from your device. This file lives in this browser only.",
+      ...overrides,
+    };
+  }
+
+  function persistAdded() {
+    writeJSON(
+      STORAGE.added,
+      state.userVideos.map((item) => ({
+        id: item.id,
+        title: item.title,
+        kind: item.kind,
+        src: item.kind === "url" ? item.src : "",
+        length: item.length || 0,
+        duration: item.duration || "",
+        age: item.age,
+        views: item.views,
+        description: item.description,
+      })),
+    );
+  }
+
+  async function addVideoFromFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) {
+      setAddStatus("That file is not a video.", true);
+      return;
+    }
+
+    setAddStatus("Reading video…");
+    const objectUrl = URL.createObjectURL(file);
+    const { duration, poster } = await probeMedia(objectUrl, true);
+
+    const entry = baseEntry({
+      id: makeId(),
+      kind: "file",
+      src: objectUrl,
+      title: el.videoTitle?.value.trim() || file.name.replace(/\.[^.]+$/, "") || "Untitled video",
+      length: duration,
+      duration: duration ? formatTime(duration) : "",
+      description: `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} MB. Stored in this browser.`,
+    });
+
+    try {
+      await putFile(entry.id, file);
+    } catch {
+      setAddStatus("Saved for this session only — browser storage refused the file.", true);
+    }
+
+    state.objectUrls.set(entry.id, objectUrl);
+    state.userVideos.unshift(entry);
+    if (poster) savePoster(entry.id, poster);
+    persistAdded();
+
+    el.createDialog.close();
+    renderFeed();
+    toast(`Added “${entry.title}”.`);
+    location.hash = `watch/${encodeURIComponent(entry.id)}`;
+  }
+
+  async function addVideoFromUrl(url) {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      setAddStatus("That is not a valid URL.", true);
+      return;
+    }
+    if (!/^https?:$/.test(parsed.protocol)) {
+      setAddStatus("Only http and https links can be added.", true);
+      return;
+    }
+
+    setAddStatus("Checking the link…");
+    const capture = canCapture(url);
+    const { duration, poster } = await probeMedia(url, capture);
+
+    const entry = baseEntry({
+      id: makeId(),
+      kind: "url",
+      src: url,
+      title: el.videoTitle?.value.trim() || parsed.pathname.split("/").filter(Boolean).pop() || "Linked video",
+      length: duration,
+      duration: duration ? formatTime(duration) : "",
+      description: `Linked from ${parsed.host}. Plays directly from that address.`,
+    });
+
+    state.userVideos.unshift(entry);
+    if (poster) savePoster(entry.id, poster);
+    persistAdded();
+
+    el.createDialog.close();
+    renderFeed();
+    toast(duration ? `Added “${entry.title}”.` : "Added, but the browser could not read that video.");
+    location.hash = `watch/${encodeURIComponent(entry.id)}`;
+  }
+
+  async function loadUserVideos() {
+    const saved = readJSON(STORAGE.added, []);
+    if (!Array.isArray(saved) || !saved.length) return;
+
+    const restored = [];
+    for (const item of saved) {
+      const entry = baseEntry({
+        id: item.id,
+        kind: item.kind,
+        title: item.title,
+        length: item.length || 0,
+        duration: item.duration || "",
+        age: item.age || "Earlier",
+        views: item.views || "—",
+        description: item.description || "",
+      });
+
+      if (item.kind === "file") {
+        const blob = await getFile(item.id).catch(() => null);
+        if (!blob) continue;
+        const objectUrl = URL.createObjectURL(blob);
+        state.objectUrls.set(item.id, objectUrl);
+        entry.src = objectUrl;
+      } else {
+        entry.src = item.src || "";
+      }
+
+      restored.push(entry);
+    }
+
+    state.userVideos = restored;
+    renderFeed();
+  }
+
+  async function init() {
     hydrateStaticIcons();
     applyTheme(initialTheme());
     applyDensity();
     renderChips();
     renderFeed();
     updateNotifBadge();
+    await loadUserVideos();
+    hydrateDurations();
 
     if (
       window.matchMedia("(min-width: 901px)").matches &&
