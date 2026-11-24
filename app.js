@@ -167,7 +167,16 @@
   }
 
   function posterFor(video) {
-    return state.posters[video.id] || video.poster || "";
+    if (state.posters[video.id]) return state.posters[video.id];
+    if (video.poster) return video.poster;
+    if (video.videoId) return `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`;
+    return "";
+  }
+
+  // A catalog entry plays through YouTube's embed; uploads and pasted URLs play
+  // through the plain <video> element.
+  function hasPlayback(video) {
+    return Boolean(video.videoId || sourceFor(video));
   }
 
   function savePoster(id, dataUrl) {
@@ -643,7 +652,7 @@
     const poster = posterFor(video);
     const watched = progressFor(video.id);
     const duration = video.duration || formatTime(video.length || 0);
-    const playable = Boolean(sourceFor(video));
+    const playable = hasPlayback(video);
 
     return `
       <article class="video-card" data-id="${video.id}" style="--i: ${index}">
@@ -804,7 +813,115 @@
     `;
   }
 
+  /* ---------- YouTube embed (official IFrame API) ---------- */
+
+  let youtubeAPI = null;
+  let youtubePlayer = null;
+  let youtubeTimer = 0;
+
+  function loadYouTubeAPI() {
+    if (youtubeAPI) return youtubeAPI;
+
+    youtubeAPI = new Promise((resolve) => {
+      if (window.YT && window.YT.Player) {
+        resolve(window.YT);
+        return;
+      }
+      const previous = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof previous === "function") previous();
+        resolve(window.YT);
+      };
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      document.head.appendChild(script);
+    });
+
+    return youtubeAPI;
+  }
+
+  async function setupYouTubePlayer(video, player) {
+    const host = $("#ytPlayer", player);
+    if (!host) return;
+
+    const YT = await loadYouTubeAPI();
+    // The viewer may have moved on while the API script was loading.
+    if (state.watching !== video || !document.contains(host)) return;
+
+    const startVol = Math.min(100, Math.max(0, Number(readValue(STORAGE.volume) ?? 100)));
+    const saved = state.progress[video.id];
+
+    youtubePlayer = new YT.Player(host, {
+      videoId: video.videoId,
+      playerVars: {
+        rel: 0,
+        modestbranding: 1,
+        playsinline: 1,
+        color: "white",
+        origin: location.origin,
+        autoplay: 1,
+      },
+      events: {
+        onReady: (event) => {
+          event.target.setVolume(startVol);
+          if (saved && saved.t > 3 && saved.d - saved.t > 4) {
+            event.target.seekTo(saved.t, true);
+            toast(`Resumed at ${formatTime(saved.t)}.`);
+          }
+          event.target.playVideo();
+          player.dataset.ready = "true";
+        },
+        onStateChange: (event) => {
+          if (event.data === YT.PlayerState.PLAYING) {
+            startYouTubeTicker(video);
+            return;
+          }
+          window.clearInterval(youtubeTimer);
+          if (event.data === YT.PlayerState.ENDED) {
+            saveProgress(video.id, 0, youtubePlayer ? youtubePlayer.getDuration() : 0);
+            if (state.autoplay) playNext();
+          }
+        },
+        onError: () => showPlayerError(video, "embed"),
+      },
+    });
+  }
+
+  function startYouTubeTicker(video) {
+    window.clearInterval(youtubeTimer);
+    youtubeTimer = window.setInterval(() => {
+      if (!youtubePlayer || typeof youtubePlayer.getCurrentTime !== "function") return;
+      saveProgress(video.id, youtubePlayer.getCurrentTime(), youtubePlayer.getDuration());
+    }, 1000);
+  }
+
   function playerHTML(video) {
+    if (video.videoId) {
+      const poster = posterFor(video);
+
+      // YouTube refuses to boot an embed from a file:// page, so the offline
+      // single file falls back to the poster and a link to the real watch page.
+      if (location.protocol === "file:") {
+        return `
+          <div class="player__art art--${video.pattern}" style="--a: ${video.palette[0]}; --b: ${video.palette[1]}; --c: ${video.palette[2]}"></div>
+          ${poster ? `<img class="player__poster" src="${escapeHtml(poster)}" alt="" />` : ""}
+          <div class="player__shade"></div>
+          <div class="player__empty-copy">
+            <strong>Open the hosted page to play</strong>
+            <span>YouTube embeds need a web address. This single file still browses offline.</span>
+            <a class="btn btn--accent" href="https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}" target="_blank" rel="noopener">Watch on YouTube</a>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="player__frame">
+          <div id="ytPlayer"></div>
+        </div>
+      `;
+    }
+
     const src = sourceFor(video);
     const poster = posterFor(video);
 
@@ -906,7 +1023,7 @@
           <span class="avatar" style="--avatar-bg: ${video.channelColor}">${escapeHtml(video.initials)}</span>
           <div class="channel-id__copy">
             <span class="channel-name">${escapeHtml(video.channel)}${video.verified ? icon("check", "icon--verified") : ""}</span>
-            <p class="channel-meta">${escapeHtml(video.subscribers)} subscribers</p>
+            ${video.subscribers && video.subscribers !== "-" ? `<p class="channel-meta">${escapeHtml(video.subscribers)} subscribers</p>` : ""}
           </div>
         </div>
         <div class="channel-actions">
@@ -964,8 +1081,17 @@
 
   function setupPlayer(video) {
     const player = $("#watchPlayer", el.watchMain);
+    if (!player) return;
+
+    // Catalog entries hand playback to YouTube's own embed, which brings its
+    // controls, captions, and quality menu with it.
+    if (video.videoId) {
+      setupYouTubePlayer(video, player);
+      return;
+    }
+
     const media = $("#realVideo", el.watchMain);
-    if (!player || !media) return;
+    if (!media) return;
 
     const seek = $("#seekBar", player);
     const vol = $("#volBar", player);
@@ -1132,7 +1258,7 @@
     player.dataset.ready = "true";
   }
 
-  function showPlayerError(video) {
+  function showPlayerError(video, kind) {
     const player = $("#watchPlayer", el.watchMain);
     if (!player || player.dataset.failed === "true") return;
     player.dataset.failed = "true";
@@ -1140,11 +1266,20 @@
 
     const notice = document.createElement("div");
     notice.className = "player__error";
-    notice.innerHTML = `
-      <strong>This stream did not load</strong>
-      <span>The link may be offline, or it blocks embedding. Paste a direct MP4 or WebM URL instead.</span>
-      <button class="btn btn--accent" type="button" data-watch-action="attach">Use a different source</button>
-    `;
+
+    if (kind === "embed") {
+      notice.innerHTML = `
+        <strong>This video can't play here</strong>
+        <span>The uploader may have turned off embedding for this video.</span>
+        <a class="btn btn--accent" href="https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}" target="_blank" rel="noopener">Watch on YouTube</a>
+      `;
+    } else {
+      notice.innerHTML = `
+        <strong>This stream did not load</strong>
+        <span>The link may be offline, or it blocks embedding. Paste a direct MP4 or WebM URL instead.</span>
+        <button class="btn btn--accent" type="button" data-watch-action="attach">Use a different source</button>
+      `;
+    }
     player.appendChild(notice);
   }
 
@@ -1152,7 +1287,7 @@
     const current = state.watching;
     if (!current) return;
     const next = library().find(
-      (item) => item.id !== current.id && sourceFor(item) && !state.hidden.has(item.id),
+      (item) => item.id !== current.id && hasPlayback(item) && !state.hidden.has(item.id),
     );
     if (!next) return;
     toast(`Up next: ${next.title}`);
@@ -1400,6 +1535,15 @@
   }
 
   function stopPlayback() {
+    window.clearInterval(youtubeTimer);
+    if (youtubePlayer) {
+      try {
+        youtubePlayer.destroy();
+      } catch {
+        /* Player was already torn down. */
+      }
+      youtubePlayer = null;
+    }
     const media = currentMedia();
     if (media && !media.paused) media.pause();
   }
